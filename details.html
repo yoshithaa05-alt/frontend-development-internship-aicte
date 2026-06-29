@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Movie Details</title>
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background:#121212;
+    color:white;
+    margin:0;
+    padding:0;
+}
+header{
+    background:#ad0b0b;
+    padding:15px;
+    text-align:center;
+    font-size:24px;
+    font-weight:bold;
+}
+.container{
+    padding:20px;
+    max-width:1000px;
+    margin:auto;
+}
+.back-button{
+    margin-bottom:15px;
+    background:#444;
+    color:white;
+    padding:10px 15px;
+    border:none;
+    border-radius:5px;
+    cursor:pointer;
+}
+.back-button:hover{
+    background:#666;
+}
+.movie-info{
+    display:flex;
+    flex-wrap:wrap;
+    gap:20px;
+}
+.movie-info img{
+    border-radius:10px;
+    width:250px;
+}
+.movie-details{
+    flex:1;
+}
+.stars span{
+    font-size:30px;
+    cursor:pointer;
+    color:gray;
+    transition:0.2s;
+}
+.stars span.active{
+    color:rgb(171, 18, 29);
+}
+.reactions span{
+    cursor:pointer;
+    font-size:22px;
+    margin-right:15px;
+}
+.comments textarea{
+    padding:10px;
+    width:100%;
+    border-radius:5px;
+    border:none;
+    margin-top:10px;
+    resize:none;
+}
+.comment{
+    background:#2c2c2c;
+    padding:8px;
+    border-radius:5px;
+    margin-bottom:5px;
+}
+.cast {
+    display:flex;
+    flex-wrap:wrap;
+    gap:15px;
+    margin-top:15px;
+}
+.cast-member {
+    width:100px;
+    text-align:center;
+}
+.cast-member img {
+    width:100px;
+    height:150px;
+    object-fit:cover;
+    border-radius:5px;
+}
+h3{
+    margin-top:15px;
+    color:#f0f0f0;
+}
+</style>
+</head>
+<body>
+<header>🎬 Movie Details</header>
+<div class="container" id="details-container"></div>
+
+<script>
+const apiKey = "5fe273fcbd2d0edd0caff68c1369977f";
+const urlParams = new URLSearchParams(window.location.search);
+const movieId = urlParams.get('movieId');
+
+async function loadMovie() {
+    const res = await fetch(`https://api.themoviedb.org/3/movie/${movieId}?api_key=${apiKey}`);
+    const movie = await res.json();
+    const savedData = JSON.parse(localStorage.getItem(movieId)) || { rating:0, likes:0, dislikes:0, comments:[] };
+
+    // Fetch credits
+    const creditsRes = await fetch(`https://api.themoviedb.org/3/movie/${movieId}/credits?api_key=${apiKey}`);
+    const credits = await creditsRes.json();
+    const cast = credits.cast.slice(0,12);
+    const directors = credits.crew.filter(c => c.job === "Director").map(d => d.name).join(", ");
+    const writers = credits.crew.filter(c => c.job === "Writer" || c.department === "Writing").map(w => w.name).join(", ");
+
+    const container = document.getElementById("details-container");
+    container.innerHTML = `
+        <button class="back-button" onclick="window.history.back()">⬅ Back to Search</button>
+        <div class="movie-info">
+            <img src="https://image.tmdb.org/t/p/w300${movie.poster_path}" alt="${movie.title}">
+            <div class="movie-details">
+                <h2>${movie.title}</h2>
+                <p>${movie.overview}</p>
+                <div><strong>Your Rating:</strong></div>
+                <div class="stars" id="stars-${movie.id}"></div>
+                <div class="reactions">
+                    <span id="like-${movie.id}" onclick="react(${movie.id},'like')">👍 ${savedData.likes}</span>
+                    <span id="dislike-${movie.id}" onclick="react(${movie.id},'dislike')">👎 ${savedData.dislikes}</span>
+                </div>
+                <div class="comments">
+                    <textarea id="comment-${movie.id}" placeholder="Write a comment and press Enter" rows="3"></textarea>
+                    <div id="comments-${movie.id}">
+                        ${savedData.comments.map(c => `<div class="comment">${c}</div>`).join("")}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <h3>Directors: ${directors || "N/A"}</h3>
+        <h3>Writers: ${writers || "N/A"}</h3>
+        <h3>Cast:</h3>
+        <div class="cast" id="cast-${movie.id}"></div>
+    `;
+
+    renderStars(movie.id, savedData.rating);
+    enableCommentEnter(movie.id);
+
+    // Render cast
+    const castDiv = document.getElementById(`cast-${movie.id}`);
+    cast.forEach(member => {
+        const div = document.createElement("div");
+        div.className = "cast-member";
+        div.innerHTML = `
+            <img src="${member.profile_path ? 'https://image.tmdb.org/t/p/w200'+member.profile_path : 'https://via.placeholder.com/100x150?text=N/A'}" alt="${member.name}">
+            <p>${member.name}</p>
+            <p style="font-size:12px;">${member.character}</p>
+        `;
+        castDiv.appendChild(div);
+    });
+}
+
+function renderStars(movieId, rating){
+    const starsDiv = document.getElementById(`stars-${movieId}`);
+    starsDiv.innerHTML = "";
+    for(let i=1; i<=5; i++){
+        const star = document.createElement("span");
+        star.innerHTML = "★"; // solid star that can be styled
+        if(i <= rating) star.classList.add("active");
+        star.onclick = () => saveRating(movieId, i);
+        starsDiv.appendChild(star);
+    }
+}
+
+function saveRating(movieId, rating){
+    const savedData = JSON.parse(localStorage.getItem(movieId)) || {rating:0,likes:0,dislikes:0,comments:[]};
+    savedData.rating = rating;
+    localStorage.setItem(movieId, JSON.stringify(savedData));
+    renderStars(movieId, rating);
+}
+
+function enableCommentEnter(movieId){
+    const commentBox = document.getElementById(`comment-${movieId}`);
+    commentBox.addEventListener("keypress", (e) => {
+        if(e.key === "Enter"){
+            e.preventDefault();
+            const text = commentBox.value.trim();
+            if(text){
+                const savedData = JSON.parse(localStorage.getItem(movieId)) || {rating:0,likes:0,dislikes:0,comments:[]};
+                savedData.comments.unshift(text);
+                localStorage.setItem(movieId, JSON.stringify(savedData));
+                const commentsDiv = document.getElementById(`comments-${movieId}`);
+                commentsDiv.innerHTML = savedData.comments.map(c => `<div class="comment">${c}</div>`).join("");
+                commentBox.value = "";
+            }
+        }
+    });
+}
+
+function react(movieId, type){
+    const savedData = JSON.parse(localStorage.getItem(movieId)) || {rating:0,likes:0,dislikes:0,comments:[]};
+    if(type === "like") savedData.likes++;
+    else savedData.dislikes++;
+    localStorage.setItem(movieId, JSON.stringify(savedData));
+    document.getElementById(`like-${movieId}`).innerHTML = `👍 ${savedData.likes}`;
+    document.getElementById(`dislike-${movieId}`).innerHTML = `👎 ${savedData.dislikes}`;
+}
+
+loadMovie();
+</script>
+</body>
+</html>
